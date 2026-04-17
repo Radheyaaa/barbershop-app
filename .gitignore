@@ -1,0 +1,45 @@
+# ========================
+# GENERAL
+# ========================
+.DS_Store
+Thumbs.db
+*.log
+
+# ========================
+# ENV (PENTING)
+# ========================
+.env
+.env.*
+!.env.example
+
+# ========================
+# LARAVEL BACKEND
+# ========================
+barbershop-backend/vendor/
+barbershop-backend/node_modules/
+
+barbershop-backend/storage/*.key
+barbershop-backend/storage/app/public
+barbershop-backend/storage/framework/
+barbershop-backend/storage/logs/
+
+barbershop-backend/bootstrap/cache/*.php
+barbershop-backend/public/storage
+
+# ========================
+# REACT FRONTEND
+# ========================
+barbershop-frontend/node_modules/
+barbershop-frontend/dist/
+barbershop-frontend/.vite/
+
+# ========================
+# EDITOR
+# ========================
+.vscode/
+.idea/
+
+# ========================
+# BUG FILE (NUL)
+# ========================
+nul
