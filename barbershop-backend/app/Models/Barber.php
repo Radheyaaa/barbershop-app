@@ -7,11 +7,18 @@ use Illuminate\Database\Eloquent\Model;
 class Barber extends Model
 {
     protected $fillable = [
-        'user_id',
-        'bio',
-        'photo',
-        'is_active',
+        'user_id', 'bio', 'photo', 'is_active',
     ];
+
+    protected $appends = ['photo_url'];
+
+    public function getPhotoUrlAttribute(): ?string
+    {
+        if (!empty($this->attributes['photo'])) {
+            return url('storage/' . $this->attributes['photo']);
+        }
+        return null;
+    }
 
     public function user()
     {
@@ -27,14 +34,4 @@ class Barber extends Model
     {
         return $this->hasMany(Reservation::class);
     }
-
-    public function getPhotoUrlAttribute()
-    {
-        if ($this->photo) {
-            return url('storage/' . $this->photo);
-        }
-        return null;
-    }
-
-    protected $appends = ['photo_url'];
 }

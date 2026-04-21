@@ -7,20 +7,24 @@ use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens;
+    use HasApiTokens, Notifiable;
 
     protected $fillable = [
-        'name',
-        'email',
-        'password',
-        'phone',
-        'role',
-        'photo',
+        'name', 'email', 'password', 'phone', 'role', 'photo'
     ];
 
-    protected $hidden = [
-        'password',
-    ];
+    protected $hidden = ['password'];
+
+    // Tambahkan ini agar tidak error jika kolom belum ada
+    protected $appends = ['photo_url'];
+
+    public function getPhotoUrlAttribute(): ?string
+    {
+        if (!empty($this->attributes['photo'])) {
+            return url('storage/' . $this->attributes['photo']);
+        }
+        return null;
+    }
 
     public function barber()
     {
@@ -31,13 +35,4 @@ class User extends Authenticatable
     {
         return $this->hasMany(Reservation::class);
     }
-
-    public function getPhotoUrlAttribute()
-    {
-        if ($this->photo) {
-            return url('storage/' . $this->photo);
-        }
-        return null;
-    }
-    protected $appends = ['photo_url'];
 }

@@ -116,6 +116,13 @@ export default function Login() {
               </div>
             </div>
 
+            <div className="flex justify-end">
+              <Link to="/forgot-password"
+                className="text-sm text-gray-400 hover:text-black transition">
+                Lupa password?
+              </Link>
+            </div>
+
             <button type="submit" disabled={loading}
               className="w-full bg-black text-white py-3 rounded-xl font-bold
                 hover:bg-gray-800 transition disabled:opacity-50 text-lg">

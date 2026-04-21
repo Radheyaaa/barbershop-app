@@ -8,6 +8,8 @@ import Home     from './pages/Home'
 import Booking  from './pages/customer/booking'
 import MyReservations from './pages/customer/MyReservations'
 import Profile from './pages/customer/Profile'
+import ForgotPassword from './pages/auth/ForgotPassword'
+import ResetPassword  from './pages/auth/ResetPassword'
 
 import Dashboard         from './pages/admin/Dashboard'
 import ManageBarbers     from './pages/admin/ManageBarbers'
@@ -68,6 +70,8 @@ function App() {
       <Route path="/"         element={<Landing />} />
       <Route path="/login"    element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password"  element={<ResetPassword />} />
 
       {/* Customer */}
       <Route path="/home" element={

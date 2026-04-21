@@ -8,6 +8,7 @@ use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ReservationController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\PasswordResetController;
 
 // ============ PUBLIC ROUTES ============
 Route::post('/register', [AuthController::class, 'register']);
@@ -17,6 +18,10 @@ Route::get('/barbers/{id}',  [BarberController::class, 'show']);
 Route::get('/services',      [ServiceController::class, 'index']);
 Route::get('/services/{id}', [ServiceController::class, 'show']);
 Route::get('/schedules',     [ScheduleController::class, 'index']);
+
+// Password Reset (public)
+Route::post('/forgot-password', [PasswordResetController::class, 'sendResetLink']);
+Route::post('/reset-password',  [PasswordResetController::class, 'resetPassword']); 
 
 // ============ PROTECTED ROUTES ============
 Route::middleware('auth:sanctum')->group(function () {
