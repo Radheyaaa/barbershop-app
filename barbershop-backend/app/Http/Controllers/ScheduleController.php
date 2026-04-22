@@ -22,9 +22,7 @@ class ScheduleController extends Controller
             $query->where('available_date', $request->date);
         }
 
-        $schedules = $query->orderBy('available_date')
-                           ->orderBy('start_time')
-                           ->get();
+        $schedules = $query->orderBy('start_time')->get();
 
         return response()->json([
             'status' => 'success',

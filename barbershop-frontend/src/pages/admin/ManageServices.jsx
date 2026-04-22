@@ -1,166 +1,163 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, ToggleLeft, ToggleRight, Scissors } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, Clock, Scissors } from 'lucide-react'
 import api from '../../services/api'
 import LoadingSpinner from '../../components/LoadingSpinner'
-import EmptyState from '../../components/EmptyState'
 import Modal from '../../components/Modal'
 
-const emptyForm = { name: '', description: '', price: '', duration: '' }
+const emptyForm = { name:'', description:'', price:'', duration:'' }
 
 export default function ManageServices() {
-  const [services, setServices]   = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [showForm, setShowForm]   = useState(false)
-  const [editTarget, setEditTarget] = useState(null) // null = tambah, obj = edit
+  const [services, setServices]       = useState([])
+  const [loading, setLoading]         = useState(true)
+  const [search, setSearch]           = useState('')
+  const [showForm, setShowForm]       = useState(false)
+  const [editTarget, setEditTarget]   = useState(null)
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [form, setForm]           = useState(emptyForm)
+  const [submitting, setSubmitting]   = useState(false)
+  const [form, setForm]               = useState(emptyForm)
 
   const fetchServices = async () => {
     setLoading(true)
     try {
       const res = await api.get('/admin/services')
       setServices(res.data.data)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
   useEffect(() => { fetchServices() }, [])
 
-  const openAdd = () => {
-    setEditTarget(null)
-    setForm(emptyForm)
+  const openAdd  = () => {
+    setEditTarget(null); setForm(emptyForm); setShowForm(true)
+  }
+  const openEdit = s => {
+    setEditTarget(s)
+    setForm({ name:s.name, description:s.description||'',
+      price:s.price, duration:s.duration })
     setShowForm(true)
   }
 
-  const openEdit = (service) => {
-    setEditTarget(service)
-    setForm({
-      name:        service.name,
-      description: service.description || '',
-      price:       service.price,
-      duration:    service.duration,
-    })
-    setShowForm(true)
-  }
-
-  const handleChange = (e) => {
+  const handleChange = e =>
     setForm({ ...form, [e.target.name]: e.target.value })
-  }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setSubmitting(true)
+  const handleSubmit = async e => {
+    e.preventDefault(); setSubmitting(true)
     try {
-      if (editTarget) {
-        await api.put(`/services/${editTarget.id}`, form)
-      } else {
-        await api.post('/services', form)
-      }
-      setShowForm(false)
-      fetchServices()
+      editTarget
+        ? await api.put(`/services/${editTarget.id}`, form)
+        : await api.post('/services', form)
+      setShowForm(false); fetchServices()
     } catch (err) {
-      alert(err.response?.data?.message || 'Gagal menyimpan layanan')
-    } finally {
-      setSubmitting(false)
-    }
+      alert(err.response?.data?.message || 'Failed to save')
+    } finally { setSubmitting(false) }
   }
 
-  const handleToggle = async (service) => {
-    await api.put(`/services/${service.id}`, { is_active: !service.is_active })
+  const handleToggle = async s => {
+    await api.put(`/services/${s.id}`, { is_active: !s.is_active })
     fetchServices()
   }
 
   const handleDelete = async () => {
-    try {
-      await api.delete(`/services/${deleteTarget.id}`)
-      setDeleteTarget(null)
-      fetchServices()
-    } catch (err) {
-      alert(err.response?.data?.message || 'Gagal menghapus layanan')
-    }
+    await api.delete(`/services/${deleteTarget.id}`)
+    setDeleteTarget(null); fetchServices()
   }
 
-  return (
-    <div className="p-6">
+  const filtered = services.filter(s => {
+    const q = search.toLowerCase()
+    return !q || s.name?.toLowerCase().includes(q)
+  })
 
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-2">
-          <Scissors size={22} />
-          <h1 className="text-2xl font-bold">Manajemen Layanan</h1>
-        </div>
+  const inputCls = `w-full bg-white/5 border border-white/10 rounded-xl
+    px-4 py-3 text-sm text-gray-200 placeholder-gray-600
+    focus:outline-none focus:border-amber-500/40 transition-colors`
+
+  return (
+    <div className="p-8 space-y-6 min-h-screen">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-black text-white tracking-tight">
+          Manage Services
+        </h1>
         <button onClick={openAdd}
-          className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-xl hover:bg-gray-800">
-          <Plus size={18} /> Tambah Layanan
+          className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400
+            text-white font-semibold px-4 py-2.5 rounded-xl text-sm
+            transition-all shadow-lg shadow-amber-500/20">
+          <Plus size={16} strokeWidth={2.5} /> Add Service
         </button>
       </div>
 
-      {/* Content */}
-      {loading ? (
-        <LoadingSpinner text="Memuat layanan..." />
-      ) : services.length === 0 ? (
-        <EmptyState
-          icon="✂️"
-          title="Belum ada layanan"
-          subtitle="Tambahkan layanan pertama untuk barbershop kamu"
-          action="+ Tambah Layanan"
-          onAction={openAdd}
-        />
-      ) : (
-        <div className="bg-white rounded-2xl shadow overflow-hidden">
+      <div className="bg-[#111111] border border-white/[0.07] rounded-2xl
+        overflow-hidden">
+
+        {/* Search */}
+        <div className="p-4 border-b border-white/[0.06]">
+          <div className="relative max-w-xs">
+            <Search size={15} className="absolute left-3 top-1/2
+              -translate-y-1/2 text-gray-600" />
+            <input value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search services..."
+              className="w-full pl-9 pr-4 py-2 bg-white/5 border
+                border-white/[0.07] rounded-xl text-sm text-gray-300
+                placeholder-gray-600 focus:outline-none
+                focus:border-amber-500/40 transition-colors" />
+          </div>
+        </div>
+
+        {loading ? <LoadingSpinner text="Loading services..." /> : (
           <table className="w-full">
-            <thead className="bg-black text-white">
-              <tr>
-                <th className="p-4 text-left">Nama Layanan</th>
-                <th className="p-4 text-left">Deskripsi</th>
-                <th className="p-4 text-left">Harga</th>
-                <th className="p-4 text-left">Durasi</th>
-                <th className="p-4 text-left">Status</th>
-                <th className="p-4 text-left">Aksi</th>
+            <thead>
+              <tr className="border-b border-white/[0.05]">
+                {['Service','Price','Duration','Status','Actions'].map(h => (
+                  <th key={h} className="px-5 py-3.5 text-left text-[11px]
+                    font-semibold text-gray-600 tracking-widest uppercase">
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {services.map(service => (
-                <tr key={service.id} className="border-b hover:bg-gray-50">
-                  <td className="p-4 font-medium">{service.name}</td>
-                  <td className="p-4 text-sm text-gray-500 max-w-xs truncate">
-                    {service.description || '-'}
+              {filtered.map(s => (
+                <tr key={s.id} className="border-b border-white/[0.04]
+                  hover:bg-white/[0.02] transition-colors">
+                  <td className="px-5 py-4">
+                    <p className="text-sm font-semibold text-gray-200">
+                      {s.name}
+                    </p>
+                    <p className="text-xs text-gray-600 mt-0.5 truncate
+                      max-w-sm">
+                      {s.description || '—'}
+                    </p>
                   </td>
-                  <td className="p-4">
-                    Rp {Number(service.price).toLocaleString('id-ID')}
+                  <td className="px-5 py-4">
+                    <span className="text-amber-400 font-bold text-sm">
+                      Rp {Number(s.price).toLocaleString('id-ID')}
+                    </span>
                   </td>
-                  <td className="p-4">{service.duration} menit</td>
-                  <td className="p-4">
-                    {service.is_active
-                      ? <span className="bg-green-100 text-green-700 px-2 py-1 rounded-full text-xs font-semibold">Aktif</span>
-                      : <span className="bg-red-100 text-red-700 px-2 py-1 rounded-full text-xs font-semibold">Nonaktif</span>
-                    }
+                  <td className="px-5 py-4">
+                    <span className="flex items-center gap-1.5 text-sm
+                      text-gray-400">
+                      <Clock size={13} className="text-gray-600" />
+                      {s.duration} min
+                    </span>
                   </td>
-                  <td className="p-4">
+                  <td className="px-5 py-4">
+                    <button onClick={() => handleToggle(s)}
+                      className={`text-xs font-bold px-3 py-1.5 rounded-lg
+                        border transition-all ${s.is_active
+                          ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                          : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                      {s.is_active ? 'Active' : 'Inactive'}
+                    </button>
+                  </td>
+                  <td className="px-5 py-4">
                     <div className="flex items-center gap-2">
-                      {/* Edit */}
-                      <button onClick={() => openEdit(service)}
-                        className="p-2 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100"
-                        title="Edit">
-                        <Pencil size={15} />
+                      <button onClick={() => openEdit(s)}
+                        className="p-2 rounded-lg text-gray-600
+                          hover:text-amber-400 hover:bg-amber-500/8 transition-all">
+                        <Pencil size={15} strokeWidth={2} />
                       </button>
-                      {/* Toggle aktif */}
-                      <button onClick={() => handleToggle(service)}
-                        className={`p-2 rounded-lg ${service.is_active
-                          ? 'bg-yellow-50 text-yellow-600 hover:bg-yellow-100'
-                          : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
-                        title={service.is_active ? 'Nonaktifkan' : 'Aktifkan'}>
-                        {service.is_active
-                          ? <ToggleRight size={15} />
-                          : <ToggleLeft size={15} />}
-                      </button>
-                      {/* Hapus */}
-                      <button onClick={() => setDeleteTarget(service)}
-                        className="p-2 rounded-lg bg-red-50 text-red-500 hover:bg-red-100"
-                        title="Hapus permanen">
-                        <Trash2 size={15} />
+                      <button onClick={() => setDeleteTarget(s)}
+                        className="p-2 rounded-lg text-gray-600
+                          hover:text-red-400 hover:bg-red-500/8 transition-all">
+                        <Trash2 size={15} strokeWidth={2} />
                       </button>
                     </div>
                   </td>
@@ -168,84 +165,79 @@ export default function ManageServices() {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Modal Tambah / Edit */}
+      {/* Add/Edit Modal */}
       {showForm && (
-        <Modal
-          title={editTarget ? 'Edit Layanan' : 'Tambah Layanan Baru'}
-          onClose={() => setShowForm(false)}
-        >
+        <Modal title={editTarget ? 'Edit Service' : 'Add New Service'}
+          onClose={() => setShowForm(false)}>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700">Nama Layanan</label>
-              <input name="name" value={form.name} onChange={handleChange} required
-                className="w-full mt-1 border p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-black"
-                placeholder="Contoh: Potong Rambut" />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium text-gray-700">Harga (Rp)</label>
-                <input name="price" type="number" value={form.price} onChange={handleChange} required
-                  className="w-full mt-1 border p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-black"
-                  placeholder="35000" />
+            {[
+              { name:'name',     label:'Service Name', type:'text',   req:true },
+              { name:'price',    label:'Price (Rp)',   type:'number', req:true },
+              { name:'duration', label:'Duration (min)', type:'number', req:true },
+            ].map(f => (
+              <div key={f.name}>
+                <label className="text-xs font-semibold text-gray-500
+                  uppercase tracking-wider block mb-1.5">{f.label}</label>
+                <input type={f.type} name={f.name} value={form[f.name]}
+                  onChange={handleChange} required={f.req}
+                  className={inputCls} />
               </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">Durasi (menit)</label>
-                <input name="duration" type="number" value={form.duration} onChange={handleChange} required
-                  className="w-full mt-1 border p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-black"
-                  placeholder="30" />
-              </div>
-            </div>
+            ))}
             <div>
-              <label className="text-sm font-medium text-gray-700">Deskripsi</label>
-              <textarea name="description" value={form.description} onChange={handleChange}
-                className="w-full mt-1 border p-3 rounded-xl focus:outline-none focus:ring-2 focus:ring-black resize-none"
-                rows={3} placeholder="Deskripsi layanan..." />
+              <label className="text-xs font-semibold text-gray-500
+                uppercase tracking-wider block mb-1.5">Description</label>
+              <textarea name="description" value={form.description}
+                onChange={handleChange} rows={3}
+                className={`${inputCls} resize-none`} />
             </div>
             <div className="flex gap-3 pt-2">
               <button type="button" onClick={() => setShowForm(false)}
-                className="flex-1 border border-gray-300 p-3 rounded-xl hover:bg-gray-50">
-                Batal
+                className="flex-1 border border-white/10 text-gray-400 py-3
+                  rounded-xl text-sm hover:bg-white/5 transition-all">
+                Cancel
               </button>
               <button type="submit" disabled={submitting}
-                className="flex-1 bg-black text-white p-3 rounded-xl hover:bg-gray-800 disabled:opacity-50">
-                {submitting ? 'Menyimpan...' : editTarget ? 'Simpan Perubahan' : 'Tambah Layanan'}
+                className="flex-1 bg-amber-500 hover:bg-amber-400 text-white
+                  py-3 rounded-xl text-sm font-bold disabled:opacity-50
+                  transition-all">
+                {submitting ? 'Saving...'
+                  : editTarget ? 'Save Changes' : 'Add Service'}
               </button>
             </div>
           </form>
         </Modal>
       )}
 
-      {/* Modal Konfirmasi Hapus */}
+      {/* Delete Confirm */}
       {deleteTarget && (
-        <Modal title="Hapus Layanan" onClose={() => setDeleteTarget(null)}>
-          <div className="text-center space-y-4">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center
-              justify-center mx-auto">
-              <Trash2 size={28} className="text-red-500" />
+        <Modal title="Delete Service" onClose={() => setDeleteTarget(null)}>
+          <div className="text-center space-y-4 py-2">
+            <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex
+              items-center justify-center mx-auto">
+              <Trash2 size={24} className="text-red-400" />
             </div>
-            <p className="text-gray-700">
-              Yakin ingin menghapus layanan <strong>{deleteTarget.name}</strong> secara permanen?
+            <p className="text-gray-300 text-sm">
+              Delete <strong className="text-white">{deleteTarget.name}</strong> permanently?
             </p>
-            <p className="text-sm text-red-500">
-              ⚠️ Tindakan ini tidak bisa dibatalkan
-            </p>
+            <p className="text-xs text-red-400">This action cannot be undone.</p>
             <div className="flex gap-3">
               <button onClick={() => setDeleteTarget(null)}
-                className="flex-1 border border-gray-300 p-3 rounded-xl hover:bg-gray-50">
-                Batal
+                className="flex-1 border border-white/10 text-gray-400
+                  py-3 rounded-xl text-sm hover:bg-white/5 transition-all">
+                Cancel
               </button>
               <button onClick={handleDelete}
-                className="flex-1 bg-red-500 text-white p-3 rounded-xl hover:bg-red-600">
-                Ya, Hapus
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white
+                  py-3 rounded-xl text-sm font-bold transition-all">
+                Delete
               </button>
             </div>
           </div>
         </Modal>
       )}
-
     </div>
   )
 }

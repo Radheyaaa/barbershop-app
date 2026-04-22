@@ -1,347 +1,634 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import {
+  Scissors, ChevronLeft, ChevronRight, Clock,
+  Calendar, Check, User, ArrowRight, X
+} from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 import api from '../../services/api'
-import { ArrowLeft, Scissors } from 'lucide-react'
 
+// ── Helpers ─────────────────────────────────────────────
+function formatDate(dateStr) {
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  })
+}
+
+function getDays(count = 14) {
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date()
+    d.setDate(d.getDate() + i)
+    return {
+      iso:     d.toISOString().split('T')[0],
+      day:     d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase(),
+      date:    d.getDate(),
+      month:   d.toLocaleDateString('en-US', { month: 'short' }),
+      isToday: i === 0,
+    }
+  })
+}
+
+// ── Step Indicator ───────────────────────────────────────
+const STEPS = [
+  { n: 1, label: 'SERVICE' },
+  { n: 2, label: 'BARBER' },
+  { n: 3, label: 'DATE & TIME' },
+  { n: 4, label: 'CONFIRM' },
+]
+
+function StepBar({ step }) {
+  return (
+    <div className="flex items-center justify-center gap-0 mb-10">
+      {STEPS.map((s, i) => {
+        const done   = step > s.n
+        const active = step === s.n
+        return (
+          <div key={s.n} className="flex items-center">
+            <div className="flex flex-col items-center gap-2">
+              <div className={`w-10 h-10 rounded-full border-2 flex items-center
+                justify-center font-bold text-sm transition-all duration-300
+                ${done
+                  ? 'bg-amber-500 border-amber-500 text-white'
+                  : active
+                    ? 'border-amber-500 text-amber-500 bg-transparent'
+                    : 'border-white/10 text-gray-600 bg-transparent'}`}>
+                {done ? <Check size={16} strokeWidth={3} /> : s.n}
+              </div>
+              <span className={`text-[10px] font-bold tracking-widest
+                transition-colors duration-300
+                ${active ? 'text-amber-500' : done ? 'text-amber-400/60' : 'text-gray-600'}`}>
+                {s.label}
+              </span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div className={`w-24 lg:w-36 h-px mx-3 mb-5 transition-colors duration-300
+                ${done ? 'bg-amber-500/60' : 'bg-white/8'}`} />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Success Modal ────────────────────────────────────────
+function SuccessModal({ reservation, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center
+      px-4 bg-black/80 backdrop-blur-sm">
+      <div className="bg-[#141414] border border-white/[0.08] rounded-3xl
+        p-8 w-full max-w-md text-center shadow-2xl"
+        style={{ animation: 'modalIn .25s ease' }}>
+        <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center
+          justify-center mx-auto mb-6">
+          <Check size={36} className="text-green-400" strokeWidth={2.5} />
+        </div>
+        <h2 className="text-2xl font-black text-white mb-2">Booking Confirmed!</h2>
+        <p className="text-gray-500 text-sm mb-6">
+          Your appointment has been successfully scheduled.
+        </p>
+        <div className="bg-white/5 border border-white/[0.07] rounded-2xl
+          p-5 text-left space-y-3 mb-8">
+          {[
+            ['Service',  reservation?.service?.name],
+            ['Barber',   reservation?.barber?.user?.name],
+            ['Date',     reservation?.schedule?.available_date
+              ? formatDate(reservation.schedule.available_date) : '-'],
+            ['Time',     reservation?.schedule?.start_time],
+            ['Total',    `Rp ${Number(reservation?.service?.price || 0)
+              .toLocaleString('id-ID')}`],
+          ].map(([label, val]) => (
+            <div key={label} className="flex justify-between items-center
+              text-sm">
+              <span className="text-gray-600">{label}</span>
+              <span className={`font-semibold ${label === 'Total'
+                ? 'text-amber-400' : 'text-gray-200'}`}>
+                {val}
+              </span>
+            </div>
+          ))}
+        </div>
+        <button onClick={onClose}
+          className="w-full bg-amber-500 hover:bg-amber-400 text-white
+            font-bold py-3.5 rounded-2xl transition-all duration-200">
+          Done
+        </button>
+      </div>
+      <style>{`
+        @keyframes modalIn {
+          from { opacity:0; transform:scale(.94) translateY(10px); }
+          to   { opacity:1; transform:scale(1) translateY(0); }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+// ── Main Component ───────────────────────────────────────
 export default function Booking() {
-  const navigate = useNavigate()
-  const [loadingSchedules, setLoadingSchedules] = useState(false)
-
-  const [step, setStep]         = useState(1) // 1: pilih service, 2: pilih barber, 3: pilih jadwal, 4: konfirmasi
+  const navigate      = useNavigate()
+  const { user, logout } = useAuth()
+  const [step, setStep]   = useState(1)
   const [services, setServices] = useState([])
   const [barbers, setBarbers]   = useState([])
   const [schedules, setSchedules] = useState([])
-  const [loading, setLoading]   = useState(false)
+  const [loading, setLoading]     = useState(true)
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [submitting, setSubmitting]     = useState(false)
+  const [successData, setSuccessData]   = useState(null)
 
   const [selected, setSelected] = useState({
     service:  null,
     barber:   null,
+    date:     null,
     schedule: null,
     note:     '',
   })
 
-  // Fetch services & barbers saat pertama load
+  const days = getDays(21)
+
+  // Fetch services & barbers
   useEffect(() => {
-    const fetchData = async () => {
-      const [s, b] = await Promise.all([
-        api.get('/services'),
-        api.get('/barbers'),
-      ])
-      setServices(s.data.data)
-      setBarbers(b.data.data)
+    const fetch = async () => {
+      try {
+        const [s, b] = await Promise.all([
+          api.get('/services'),
+          api.get('/barbers'),
+        ])
+        setServices(s.data.data || [])
+        setBarbers(b.data.data || [])
+      } finally { setLoading(false) }
     }
-    fetchData()
+    fetch()
   }, [])
 
-  // Fetch jadwal saat barber dipilih
+  // Fetch schedules saat barber atau tanggal berubah
   useEffect(() => {
-    if (!selected.barber) return
-    const fetchSchedules = async () => {
-      setLoadingSchedules(true)
+    if (!selected.barber || !selected.date) return
+    const fetchSlots = async () => {
+      setLoadingSlots(true)
+      setSelected(s => ({ ...s, schedule: null }))
       try {
-        const res = await api.get(`/schedules?barber_id=${selected.barber.id}`)
-        setSchedules(res.data.data)
-      } finally {
-        setLoadingSchedules(false)
-      }
+        const res = await api.get(
+          `/schedules?barber_id=${selected.barber.id}&date=${selected.date}`
+        )
+        setSchedules(res.data.data || [])
+      } finally { setLoadingSlots(false) }
     }
-    fetchSchedules()
-  }, [selected.barber])
+    fetchSlots()
+  }, [selected.barber, selected.date])
+
+  // Cek apakah slot waktu sudah lewat
+  const isSlotPast = (schedule) => {
+    const now      = new Date()
+    const todayIso = now.toISOString().split('T')[0]
+    if (selected.date !== todayIso) return false
+    const [h, m]  = schedule.start_time.split(':').map(Number)
+    const slotMin = h * 60 + m
+    const nowMin  = now.getHours() * 60 + now.getMinutes()
+    return slotMin <= nowMin
+  }
 
   const handleSubmit = async () => {
-    setLoading(true)
+    setSubmitting(true)
     try {
-      await api.post('/reservations', {
+      const res = await api.post('/reservations', {
         barber_id:   selected.barber.id,
         service_id:  selected.service.id,
         schedule_id: selected.schedule.id,
         note:        selected.note,
       })
-      alert('Reservasi berhasil dibuat!')
-      navigate('/my-reservations')
+      setSuccessData(res.data.data)
     } catch (err) {
-      alert(err.response?.data?.message || 'Gagal membuat reservasi')
-    } finally {
-      setLoading(false)
-    }
+      alert(err.response?.data?.message || 'Failed to create reservation')
+    } finally { setSubmitting(false) }
   }
 
-  // Step indicator
-  const steps = [
-    { n: 1, label: 'Layanan' },
-    { n: 2, label: 'Barber' },
-    { n: 3, label: 'Jadwal' },
-    { n: 4, label: 'Konfirmasi' },
-  ]
+  const handleSuccessClose = () => {
+    navigate('/my-reservations')
+  }
+
+  const cardBase = `border rounded-xl p-5 cursor-pointer transition-all
+    duration-200 hover:-translate-y-0.5`
+  const cardActive   = 'border-amber-500 bg-amber-500/8'
+  const cardInactive = 'border-white/[0.07] bg-white/[0.02] hover:border-white/20'
+
+  if (loading) return (
+    <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
+      <div className="w-8 h-8 border-2 border-gray-800 border-t-amber-500
+        rounded-full animate-spin" />
+    </div>
+  )
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-[#0a0a0a] text-gray-100"
+      style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
 
-    {/* Navbar dengan tombol kembali */}
-    <nav className="bg-white border-b border-gray-100 px-6 py-4 sticky top-0 z-40">
-      <div className="max-w-2xl mx-auto flex items-center gap-4">
-        <button
-          onClick={() => navigate('/home')}
-          className="p-2 rounded-xl hover:bg-gray-100 transition">
-          <ArrowLeft size={22} />
-        </button>
+      {successData && (
+        <SuccessModal reservation={successData} onClose={handleSuccessClose} />
+      )}
+
+      {/* Navbar */}
+      <nav className="bg-[#0d0d0d] border-b border-white/[0.06] px-6 py-4
+        flex items-center justify-between sticky top-0 z-40">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 bg-black rounded-lg flex items-center justify-center">
-            <Scissors size={14} className="text-white" />
+          <div className="w-7 h-7 bg-amber-500 rounded-lg flex items-center
+            justify-center">
+            <Scissors size={14} className="text-white" strokeWidth={2.5} />
           </div>
-          <span className="font-bold">Buat Reservasi</span>
+          <span className="font-black text-base text-amber-400 tracking-tight">
+            BarberCo
+          </span>
         </div>
-      </div>
-    </nav>
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate('/my-reservations')}
+            className="text-sm text-gray-500 hover:text-gray-200
+              transition-colors">
+            My History
+          </button>
+          <button onClick={() => navigate('/booking')}
+            className="bg-amber-500 hover:bg-amber-400 text-white text-sm
+              font-semibold px-4 py-2 rounded-xl transition-all">
+            Book Now
+          </button>
+          <button onClick={logout}
+            className="border border-white/10 text-gray-400 hover:text-white
+              text-sm px-4 py-2 rounded-xl transition-all hover:border-white/20">
+            Logout
+          </button>
+        </div>
+      </nav>
 
-    <div className="min-h-screen bg-gray-100 py-10 px-4">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-4xl mx-auto px-6 py-10">
 
-        <h1 className="text-3xl font-bold text-center mb-8">💈 Buat Reservasi</h1>
+        {/* Step Bar */}
+        <StepBar step={step} />
 
-        {/* Step Indicator */}
-        <div className="flex items-center justify-center mb-10">
-          {steps.map((s, i) => (
-            <div key={s.n} className="flex items-center">
-              <div className={`flex items-center justify-center w-10 h-10 rounded-full font-bold text-sm
-                ${step >= s.n ? 'bg-black text-white' : 'bg-gray-300 text-gray-500'}`}>
-                {s.n}
-              </div>
-              <span className={`ml-2 text-sm font-medium
-                ${step >= s.n ? 'text-black' : 'text-gray-400'}`}>
-                {s.label}
-              </span>
-              {i < steps.length - 1 && (
-                <div className={`w-10 h-1 mx-3
-                  ${step > s.n ? 'bg-black' : 'bg-gray-300'}`} />
-              )}
+        {/* ══ STEP 1 — SERVICE ══ */}
+        {step === 1 && (
+          <div className="bg-[#111111] border border-white/[0.07] rounded-2xl p-8">
+            <div className="flex items-center gap-3 mb-7">
+              <Scissors size={20} className="text-amber-500" strokeWidth={2} />
+              <h2 className="text-xl font-black text-white tracking-tight">
+                Select Service
+              </h2>
             </div>
-          ))}
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-6">
-
-          {/* ======= STEP 1: Pilih Layanan ======= */}
-          {step === 1 && (
-            <div>
-              <h2 className="text-xl font-bold mb-4">Pilih Layanan</h2>
-              <div className="space-y-3">
-                {services.length === 0 && (
-                  <p className="text-gray-400 text-center py-6">Tidak ada layanan tersedia</p>
-                )}
-                {services.map(service => (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {services.map(service => {
+                const active = selected.service?.id === service.id
+                return (
                   <div key={service.id}
-                    onClick={() => setSelected({ ...selected, service })}
-                    className={`p-4 border-2 rounded-xl cursor-pointer transition
-                      ${selected.service?.id === service.id
-                        ? 'border-black bg-black text-white'
-                        : 'border-gray-200 hover:border-gray-400'}`}>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold">{service.name}</p>
-                        <p className={`text-sm mt-1
-                          ${selected.service?.id === service.id
-                            ? 'text-gray-300' : 'text-gray-500'}`}>
-                          {service.description || 'Tidak ada deskripsi'}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-bold">
-                          Rp {Number(service.price).toLocaleString('id-ID')}
-                        </p>
-                        <p className={`text-sm
-                          ${selected.service?.id === service.id
-                            ? 'text-gray-300' : 'text-gray-500'}`}>
-                          {service.duration} menit
-                        </p>
-                      </div>
+                    onClick={() => setSelected(s => ({ ...s, service }))}
+                    className={`${cardBase} ${active ? cardActive : cardInactive}`}>
+                    <div className="flex justify-between items-start mb-3">
+                      <h3 className={`font-bold text-base tracking-tight
+                        ${active ? 'text-white' : 'text-gray-200'}`}>
+                        {service.name}
+                      </h3>
+                      <span className="text-amber-400 font-black text-base ml-4 shrink-0">
+                        Rp {Number(service.price).toLocaleString('id-ID')}
+                      </span>
                     </div>
+                    <p className={`text-sm mb-4 leading-relaxed
+                      ${active ? 'text-gray-300' : 'text-gray-600'}`}>
+                      {service.description || 'Professional barbershop service.'}
+                    </p>
+                    <div className={`flex items-center gap-1.5 text-[11px]
+                      font-bold tracking-widest uppercase
+                      ${active ? 'text-amber-400/80' : 'text-gray-700'}`}>
+                      <Clock size={12} strokeWidth={2} />
+                      {service.duration} minutes
+                    </div>
+                    {active && (
+                      <div className="mt-3 pt-3 border-t border-amber-500/20
+                        flex items-center gap-2 text-amber-400 text-xs font-semibold">
+                        <Check size={13} strokeWidth={3} />
+                        Selected
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
+                )
+              })}
+            </div>
+            <div className="flex justify-end mt-8">
               <button
                 onClick={() => setStep(2)}
                 disabled={!selected.service}
-                className="w-full mt-6 bg-black text-white p-3 rounded-xl font-semibold
-                  hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed">
-                Lanjut →
+                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400
+                  text-white font-bold px-8 py-3.5 rounded-xl transition-all
+                  disabled:opacity-30 disabled:cursor-not-allowed
+                  hover:shadow-lg hover:shadow-amber-500/20">
+                Next: Choose Barber
+                <ArrowRight size={17} />
               </button>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ======= STEP 2: Pilih Barber ======= */}
-          {step === 2 && (
-            <div>
-              <h2 className="text-xl font-bold mb-4">Pilih Barber</h2>
-              <div className="space-y-3">
-                {barbers.length === 0 && (
-                  <p className="text-gray-400 text-center py-6">Tidak ada barber tersedia</p>
-                )}
-                {barbers.map(barber => (
+        {/* ══ STEP 2 — BARBER ══ */}
+        {step === 2 && (
+          <div className="bg-[#111111] border border-white/[0.07] rounded-2xl p-8">
+            <div className="flex items-center gap-3 mb-7">
+              <button onClick={() => setStep(1)}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300
+                  hover:bg-white/5 transition-all">
+                <ChevronLeft size={18} />
+              </button>
+              <User size={20} className="text-amber-500" strokeWidth={2} />
+              <h2 className="text-xl font-black text-white tracking-tight">
+                Choose Your Barber
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {barbers.map(barber => {
+                const active = selected.barber?.id === barber.id
+                return (
                   <div key={barber.id}
-                    onClick={() => setSelected({ ...selected, barber, schedule: null })}
-                    className={`p-4 border-2 rounded-xl cursor-pointer transition
-                      ${selected.barber?.id === barber.id
-                        ? 'border-black bg-black text-white'
-                        : 'border-gray-200 hover:border-gray-400'}`}>
-                    <div className="flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-gray-300 flex items-center justify-center text-xl">
-                        👨
-                      </div>
-                      <div>
-                        <p className="font-semibold">{barber.user?.name}</p>
-                        <p className={`text-sm
-                          ${selected.barber?.id === barber.id
-                            ? 'text-gray-300' : 'text-gray-500'}`}>
-                          {barber.bio || 'Barber profesional'}
-                        </p>
-                      </div>
+                    onClick={() => setSelected(s => ({
+                      ...s, barber, schedule: null
+                    }))}
+                    className={`${cardBase} text-center
+                      ${active ? cardActive : cardInactive}`}>
+                    {/* Photo */}
+                    <div className={`w-20 h-20 rounded-2xl overflow-hidden mx-auto
+                      mb-4 border-2 transition-colors
+                      ${active ? 'border-amber-500' : 'border-white/10'}`}>
+                      {barber.photo_url ? (
+                        <img src={barber.photo_url} alt={barber.user?.name}
+                          className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-white/5 flex items-center
+                          justify-center">
+                          <User size={32} className="text-gray-600"
+                            strokeWidth={1.5} />
+                        </div>
+                      )}
                     </div>
+                    <p className={`font-bold text-base tracking-tight mb-1
+                      ${active ? 'text-white' : 'text-gray-200'}`}>
+                      {barber.user?.name}
+                    </p>
+                    <p className={`text-xs leading-relaxed
+                      ${active ? 'text-gray-400' : 'text-gray-600'}`}>
+                      {barber.bio || 'Professional barber'}
+                    </p>
+                    {active && (
+                      <div className="mt-3 pt-3 border-t border-amber-500/20
+                        flex items-center justify-center gap-2
+                        text-amber-400 text-xs font-semibold">
+                        <Check size={13} strokeWidth={3} />
+                        Selected
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-              <div className="flex gap-3 mt-6">
-                <button onClick={() => setStep(1)}
-                  className="flex-1 border border-black p-3 rounded-xl font-semibold hover:bg-gray-100">
-                  ← Kembali
-                </button>
-                <button
-                  onClick={() => setStep(3)}
-                  disabled={!selected.barber}
-                  className="flex-1 bg-black text-white p-3 rounded-xl font-semibold
-                    hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed">
-                  Lanjut →
-                </button>
+                )
+              })}
+            </div>
+            <div className="flex justify-end mt-8">
+              <button
+                onClick={() => setStep(3)}
+                disabled={!selected.barber}
+                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400
+                  text-white font-bold px-8 py-3.5 rounded-xl transition-all
+                  disabled:opacity-30 disabled:cursor-not-allowed
+                  hover:shadow-lg hover:shadow-amber-500/20">
+                Next: Pick a Date
+                <ArrowRight size={17} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ══ STEP 3 — DATE & TIME ══ */}
+        {step === 3 && (
+          <div className="bg-[#111111] border border-white/[0.07] rounded-2xl p-8">
+            <div className="flex items-center gap-3 mb-7">
+              <button onClick={() => setStep(2)}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300
+                  hover:bg-white/5 transition-all">
+                <ChevronLeft size={18} />
+              </button>
+              <Calendar size={20} className="text-amber-500" strokeWidth={2} />
+              <h2 className="text-xl font-black text-white tracking-tight">
+                Select Date & Time
+              </h2>
+            </div>
+
+            {/* Date picker */}
+            <div className="mb-8">
+              <p className="text-[11px] font-bold text-gray-600 tracking-widest
+                uppercase mb-4">Date</p>
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                {days.map(d => {
+                  const active = selected.date === d.iso
+                  return (
+                    <button key={d.iso}
+                      onClick={() => setSelected(s => ({
+                        ...s, date: d.iso, schedule: null
+                      }))}
+                      className={`flex flex-col items-center shrink-0 w-16
+                        py-3 px-2 rounded-xl border transition-all duration-200
+                        ${active
+                          ? 'bg-amber-500 border-amber-500 text-white'
+                          : 'border-white/[0.07] text-gray-400 hover:border-amber-500/40 hover:text-white'}`}>
+                      <span className="text-[10px] font-bold tracking-wider mb-1">
+                        {d.day}
+                      </span>
+                      <span className="text-xl font-black leading-none">
+                        {d.date}
+                      </span>
+                      <span className={`text-[10px] mt-1
+                        ${active ? 'text-amber-100' : 'text-gray-600'}`}>
+                        {d.month}
+                      </span>
+                    </button>
+                  )
+                })}
               </div>
             </div>
-          )}
 
-          {/* ======= STEP 3: Pilih Jadwal ======= */}
-          {step === 3 && (
-            <div>
-              <h2 className="text-xl font-bold mb-1">Pilih Jadwal</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Barber: <strong>{selected.barber?.user?.name}</strong>
-              </p>
-              <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                {loadingSchedules ? (
-                  <div className="flex justify-center py-10">
-                    <div className="w-8 h-8 border-4 border-gray-200 border-t-black rounded-full animate-spin" />
+            {/* Time slots */}
+            {selected.date && (
+              <div>
+                <p className="text-[11px] font-bold text-gray-600 tracking-widest
+                  uppercase mb-4">Available Slots</p>
+
+                {loadingSlots ? (
+                  <div className="flex items-center justify-center py-12">
+                    <div className="w-7 h-7 border-2 border-gray-800
+                      border-t-amber-500 rounded-full animate-spin" />
                   </div>
                 ) : schedules.length === 0 ? (
-                  <p className="text-gray-400 text-center py-6">
-                    Tidak ada jadwal tersedia untuk barber ini
-                  </p>
-                ) : (
-                schedules.map(schedule => (
-                  <div key={schedule.id}
-                    onClick={() => setSelected({ ...selected, schedule })}
-                    className={`p-4 border-2 rounded-xl cursor-pointer transition
-                      ${selected.schedule?.id === schedule.id
-                        ? 'border-black bg-black text-white'
-                        : 'border-gray-200 hover:border-gray-400'}`}>
-                    <div className="flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold">{schedule.available_date}</p>
-                        <p className={`text-sm
-                          ${selected.schedule?.id === schedule.id
-                            ? 'text-gray-300' : 'text-gray-500'}`}>
-                          {schedule.start_time} - {schedule.end_time}
-                        </p>
-                      </div>
-                      <span className={`text-xs px-2 py-1 rounded-full
-                        ${selected.schedule?.id === schedule.id
-                          ? 'bg-white text-black'
-                          : 'bg-green-100 text-green-700'}`}>
-                        Tersedia
-                      </span>
-                    </div>
+                  <div className="text-center py-12 border border-white/[0.05]
+                    rounded-xl">
+                    <Clock size={32} className="text-gray-700 mx-auto mb-3"
+                      strokeWidth={1.5} />
+                    <p className="text-gray-600 text-sm">
+                      No available slots for this date
+                    </p>
+                    <p className="text-gray-700 text-xs mt-1">
+                      Try another date or barber
+                    </p>
                   </div>
-                )))}
+                ) : (
+                  <div className="grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6
+                    gap-2">
+                    {schedules.map(slot => {
+                      const past   = isSlotPast(slot)
+                      const active = selected.schedule?.id === slot.id
+                      return (
+                        <button key={slot.id}
+                          disabled={past}
+                          onClick={() => !past && setSelected(s => ({
+                            ...s, schedule: slot
+                          }))}
+                          className={`py-3 px-2 rounded-xl border text-sm
+                            font-semibold transition-all duration-200
+                            ${past
+                              ? 'border-white/[0.03] text-gray-800 cursor-not-allowed line-through'
+                              : active
+                                ? 'bg-amber-500 border-amber-500 text-white'
+                                : 'border-white/[0.07] text-gray-400 hover:border-amber-500/40 hover:text-white'
+                            }`}>
+                          {slot.start_time.slice(0, 5)}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
-              <div className="flex gap-3 mt-6">
-                <button onClick={() => setStep(2)}
-                  className="flex-1 border border-black p-3 rounded-xl font-semibold hover:bg-gray-100">
-                  ← Kembali
-                </button>
-                <button
-                  onClick={() => setStep(4)}
-                  disabled={!selected.schedule}
-                  className="flex-1 bg-black text-white p-3 rounded-xl font-semibold
-                    hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed">
-                  Lanjut →
-                </button>
-              </div>
+            )}
+
+            <div className="flex justify-end mt-8">
+              <button
+                onClick={() => setStep(4)}
+                disabled={!selected.schedule}
+                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400
+                  text-white font-bold px-8 py-3.5 rounded-xl transition-all
+                  disabled:opacity-30 disabled:cursor-not-allowed
+                  hover:shadow-lg hover:shadow-amber-500/20">
+                Review Booking
+                <ArrowRight size={17} />
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* ======= STEP 4: Konfirmasi ======= */}
-          {step === 4 && (
-            <div>
-              <h2 className="text-xl font-bold mb-4">Konfirmasi Reservasi</h2>
+        {/* ══ STEP 4 — CONFIRM ══ */}
+        {step === 4 && (
+          <div className="bg-[#111111] border border-white/[0.07] rounded-2xl p-8">
+            <div className="flex items-center gap-3 mb-8">
+              <button onClick={() => setStep(3)}
+                className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300
+                  hover:bg-white/5 transition-all">
+                <ChevronLeft size={18} />
+              </button>
+              <h2 className="text-xl font-black text-white tracking-tight">
+                Confirm Booking
+              </h2>
+            </div>
 
-              <div className="space-y-3 bg-gray-50 p-4 rounded-xl mb-4">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Layanan</span>
-                  <span className="font-semibold">{selected.service?.name}</span>
+            {/* Summary card */}
+            <div className="border border-white/[0.07] rounded-2xl overflow-hidden
+              mb-8">
+              <div className="bg-white/[0.03] px-6 py-4 border-b
+                border-white/[0.07]">
+                <p className="text-sm font-bold text-white tracking-tight">
+                  Booking Summary
+                </p>
+              </div>
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Service */}
+                <div>
+                  <p className="text-[10px] font-bold text-gray-600
+                    tracking-widest uppercase mb-2">Service</p>
+                  <p className="text-white font-bold text-base">
+                    {selected.service?.name}
+                  </p>
+                  <p className="text-gray-600 text-sm mt-0.5">
+                    {selected.service?.duration} min
+                  </p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Harga</span>
-                  <span className="font-semibold">
+                {/* Barber */}
+                <div>
+                  <p className="text-[10px] font-bold text-gray-600
+                    tracking-widest uppercase mb-2">Barber</p>
+                  <p className="text-white font-bold text-base">
+                    {selected.barber?.user?.name}
+                  </p>
+                  <p className="text-amber-500/70 text-xs uppercase
+                    tracking-widest mt-0.5">
+                    {selected.barber?.bio || 'Professional Barber'}
+                  </p>
+                </div>
+                {/* Date & Time */}
+                <div>
+                  <p className="text-[10px] font-bold text-gray-600
+                    tracking-widest uppercase mb-2">Date & Time</p>
+                  <p className="text-white font-bold">
+                    {selected.date ? formatDate(selected.date) : '-'}
+                  </p>
+                  <p className="text-gray-400 text-sm mt-0.5">
+                    {selected.schedule?.start_time}
+                  </p>
+                </div>
+                {/* Price */}
+                <div>
+                  <p className="text-[10px] font-bold text-gray-600
+                    tracking-widest uppercase mb-2">Total Price</p>
+                  <p className="text-amber-400 font-black text-2xl">
                     Rp {Number(selected.service?.price).toLocaleString('id-ID')}
-                  </span>
+                  </p>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Durasi</span>
-                  <span className="font-semibold">{selected.service?.duration} menit</span>
-                </div>
-                <hr />
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Barber</span>
-                  <span className="font-semibold">{selected.barber?.user?.name}</span>
-                </div>
-                <hr />
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Tanggal</span>
-                  <span className="font-semibold">{selected.schedule?.available_date}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Jam</span>
-                  <span className="font-semibold">
-                    {selected.schedule?.start_time} - {selected.schedule?.end_time}
-                  </span>
-                </div>
-              </div>
-
-              {/* Catatan */}
-              <textarea
-                placeholder="Catatan tambahan (opsional)..."
-                value={selected.note}
-                onChange={(e) => setSelected({ ...selected, note: e.target.value })}
-                className="w-full border p-3 rounded-xl focus:outline-none focus:ring-2
-                  focus:ring-black resize-none mb-4"
-                rows={3}
-              />
-
-              <div className="flex gap-3">
-                <button onClick={() => setStep(3)}
-                  className="flex-1 border border-black p-3 rounded-xl font-semibold hover:bg-gray-100">
-                  ← Kembali
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="flex-1 bg-black text-white p-3 rounded-xl font-semibold
-                    hover:bg-gray-800 disabled:opacity-40">
-                  {loading ? 'Memproses...' : '✅ Konfirmasi Booking'}
-                </button>
               </div>
             </div>
-          )}
 
-        </div>
+            {/* Note */}
+            <div className="mb-8">
+              <label className="text-[11px] font-bold text-gray-600
+                tracking-widest uppercase block mb-2">
+                Additional Notes (Optional)
+              </label>
+              <textarea
+                value={selected.note}
+                onChange={e => setSelected(s => ({ ...s, note: e.target.value }))}
+                placeholder="Any special requests or notes for your barber..."
+                rows={3}
+                className="w-full bg-white/5 border border-white/[0.07]
+                  rounded-xl px-4 py-3 text-sm text-gray-200
+                  placeholder-gray-700 focus:outline-none
+                  focus:border-amber-500/40 transition-colors resize-none"
+              />
+            </div>
+
+            {/* Confirm button */}
+            <div className="flex justify-end">
+              <button
+                onClick={handleSubmit}
+                disabled={submitting}
+                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-400
+                  text-white font-black px-10 py-4 rounded-xl transition-all
+                  disabled:opacity-50 text-sm tracking-widest uppercase
+                  hover:shadow-xl hover:shadow-amber-500/25
+                  hover:-translate-y-0.5">
+                {submitting ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/30
+                      border-t-white rounded-full animate-spin" />
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Check size={17} strokeWidth={3} />
+                    Confirm Booking
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
-  </div>
   )
 }

@@ -45,22 +45,38 @@ class AuthController extends Controller
             'password' => 'required',
         ]);
 
-        $user = User::where('email', $request->email)->first();
+        try {
+            $user = User::where('email', $request->email)->first();
 
-        if (!$user || !Hash::check($request->password, $user->password)) {
-            throw ValidationException::withMessages([
-                'email' => ['Email atau password salah.'],
+            if (!$user) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Email tidak ditemukan'
+                ], 422);
+            }
+
+            if (!Hash::check($request->password, $user->password)) {
+                return response()->json([
+                    'status'  => 'error',
+                    'message' => 'Password salah'
+                ], 422);
+            }
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+
+            return response()->json([
+                'status'  => 'success',
+                'message' => 'Login berhasil',
+                'token'   => $token,
+                'user'    => $user,
             ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'status'  => 'error',
+                'message' => 'Server error: ' . $e->getMessage()
+            ], 500);
         }
-
-        $token = $user->createToken('auth_token')->plainTextToken;
-
-        return response()->json([
-            'status'  => 'success',
-            'message' => 'Login berhasil',
-            'token'   => $token,
-            'user'    => $user,
-        ]);
     }
 
     // Logout

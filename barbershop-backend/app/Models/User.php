@@ -3,11 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
-    use HasApiTokens, Notifiable;
+    use HasApiTokens;
 
     protected $fillable = [
         'name', 'email', 'password', 'phone', 'role', 'photo'
@@ -15,13 +16,16 @@ class User extends Authenticatable
 
     protected $hidden = ['password'];
 
-    // Tambahkan ini agar tidak error jika kolom belum ada
     protected $appends = ['photo_url'];
 
     public function getPhotoUrlAttribute(): ?string
     {
-        if (!empty($this->attributes['photo'])) {
-            return url('storage/' . $this->attributes['photo']);
+        try {
+            if (!empty($this->attributes['photo'])) {
+                return url('storage/' . $this->attributes['photo']);
+            }
+        } catch (\Exception $e) {
+            return null;
         }
         return null;
     }
