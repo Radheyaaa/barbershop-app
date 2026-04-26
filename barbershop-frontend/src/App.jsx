@@ -23,15 +23,16 @@ import ManageBarbers     from './pages/admin/ManageBarbers'
 import ManageServices    from './pages/admin/ManageServices'
 import ManageReservations from './pages/admin/ManageReservations'
 import Hours             from './pages/admin/Hours'
+import AdminProfile from './pages/admin/AdminProfile'
 
-// ── Guards ──────────────────────────────────────────────
+// Guards Customer
 function CustomerRoute({ children }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" />
   if (user.role === 'admin') return <Navigate to="/admin/dashboard" />
   return children
 }
-
+// Guards Admin
 function AdminRoute({ children }) {
   const { user } = useAuth()
   if (!user) return <Navigate to="/login" />
@@ -80,6 +81,9 @@ export default function App() {
       }/>
       <Route path="/admin/hours" element={
         <AdminRoute><Hours /></AdminRoute>
+      }/>
+      <Route path="/admin/profile" element={
+        <AdminRoute><AdminProfile /></AdminRoute>
       }/>
 
       {/* Fallback */}

@@ -128,7 +128,6 @@ function SuccessModal({ reservation, onClose }) {
 export default function Booking() {
   const navigate      = useNavigate()
   const { user, logout } = useAuth()
-  const [step, setStep]   = useState(1)
   const [services, setServices] = useState([])
   const [barbers, setBarbers]   = useState([])
   const [schedules, setSchedules] = useState([])
@@ -137,6 +136,7 @@ export default function Booking() {
   const [submitting, setSubmitting]     = useState(false)
   const [successData, setSuccessData]   = useState(null)
 
+  const [step, setStep]   = useState(1)
   const [selected, setSelected] = useState({
     service:  null,
     barber:   null,

@@ -5,10 +5,11 @@ import {
 } from 'recharts'
 import {
   DollarSign, Activity, CheckCircle, Users,
-  CalendarCheck, ArrowRight
+  CalendarCheck, ArrowRight, Trophy 
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../../services/api'
+
 
 // ── Custom Tooltip ──────────────────────────────────────
 function ChartTooltip({ active, payload, label }) {
@@ -246,6 +247,65 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Busiest Barber */}
+      {data?.busiest_barbers?.length > 0 && (
+        <div className="bg-[#111111] border border-white/[0.07] rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-5">
+            <Trophy size={18} className="text-amber-500" strokeWidth={2} />
+            <div>
+              <h2 className="text-base font-bold text-white">Top Barbers</h2>
+              <p className="text-gray-600 text-xs mt-0.5">
+                Ranked by total bookings
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {data.busiest_barbers.map((barber, i) => (
+              <div key={barber.id}
+                className="flex items-center gap-4 p-3 rounded-xl
+                  bg-white/[0.02] border border-white/[0.04]
+                  hover:border-white/[0.08] transition-colors">
+                <span className={`w-8 h-8 rounded-xl flex items-center
+                  justify-center text-sm font-black shrink-0
+                  ${i === 0 ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
+                  : i === 1 ? 'bg-gray-600 text-white'
+                  : i === 2 ? 'bg-orange-800/60 text-orange-300'
+                  : 'bg-white/5 text-gray-600'}`}>
+                  {i + 1}
+                </span>
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="w-9 h-9 rounded-xl overflow-hidden bg-white/5
+                    border border-white/[0.07] shrink-0">
+                    {barber.user?.photo_url ? (
+                      <img src={barber.user.photo_url} alt={barber.user?.name}
+                        className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Users size={16} className="text-gray-600" strokeWidth={1.5} />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-200 truncate">
+                      {barber.user?.name}
+                    </p>
+                    <p className="text-xs text-gray-600 truncate">
+                      {barber.bio || 'Barber'}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-amber-400 font-black text-sm">
+                    {barber.reservations_count}
+                  </p>
+                  <p className="text-gray-700 text-[10px]">bookings</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Upcoming Reservations */}
       <div className="bg-[#111111] border border-white/[0.07] rounded-2xl p-6">

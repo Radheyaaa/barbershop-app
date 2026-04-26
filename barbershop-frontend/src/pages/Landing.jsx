@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Scissors, Star, Clock, Shield, ChevronRight, ChevronDown,
+  Scissors, Star, Clock, Shield, ChevronRight, ChevronLeft, ChevronDown,
   MapPin, Phone, Globe, Menu, X, Sun, Moon,
   Award, Users, ThumbsUp, ArrowRight, LogIn
 } from 'lucide-react'
@@ -87,6 +87,14 @@ export default function Landing() {
   const navBg = D
     ? 'bg-[#0a0a0a]/80 border-white/[0.06]'
     : 'bg-white/80 border-gray-100'
+
+  const [carouselIdx, setCarouselIdx] = useState(0)
+  const VISIBLE = 3 // barber yang terlihat sekaligus
+
+  const maxIdx = Math.max(0, barbers.length - VISIBLE)
+  const prevSlide = () => setCarouselIdx(i => Math.max(0, i - 1))
+  const nextSlide = () => setCarouselIdx(i => Math.min(maxIdx, i + 1))
+  const visibleBarbers = barbers.slice(carouselIdx, carouselIdx + VISIBLE)
 
   return (
     <div className={`min-h-screen ${bg} ${txt} antialiased`}
@@ -548,23 +556,52 @@ export default function Landing() {
       {/* ══════════════════════════════════════
           BARBERS
       ══════════════════════════════════════ */}
-      <section id="barbers" className="py-28 px-6 lg:px-10 bg-[#080808]
-        transition-colors duration-300">
+      <section id="barbers" className="py-28 px-6 lg:px-10 bg-[#080808]">
         <div className="max-w-7xl mx-auto">
 
+          {/* Header */}
           <div className="flex flex-col md:flex-row md:items-end
             justify-between gap-6 mb-16">
             <div>
               <p className="text-amber-500 text-xs font-bold
-                tracking-[0.2em] uppercase mb-3">
-                Tim Kami
-              </p>
+                tracking-[0.2em] uppercase mb-3">Tim Kami</p>
               <h2 className="text-4xl lg:text-5xl font-black text-white
-                tracking-tight">
-                Kenali Barber Kami
-              </h2>
+                tracking-tight">Kenali Barber Kami</h2>
               <div className="w-10 h-0.5 bg-amber-500 mt-4 rounded-full" />
             </div>
+
+            {/* Navigation arrows */}
+            {barbers.length > VISIBLE && (
+              <div className="flex items-center gap-2">
+                <button onClick={prevSlide} disabled={carouselIdx === 0}
+                  className={`w-11 h-11 rounded-xl border flex items-center
+                    justify-center transition-all duration-200
+                    ${carouselIdx === 0
+                      ? 'border-white/[0.05] text-gray-700 cursor-not-allowed'
+                      : 'border-white/15 text-gray-400 hover:border-amber-500/50 hover:text-amber-400'}`}>
+                  <ChevronLeft size={20} />
+                </button>
+                <button onClick={nextSlide} disabled={carouselIdx >= maxIdx}
+                  className={`w-11 h-11 rounded-xl border flex items-center
+                    justify-center transition-all duration-200
+                    ${carouselIdx >= maxIdx
+                      ? 'border-white/[0.05] text-gray-700 cursor-not-allowed'
+                      : 'border-white/15 text-gray-400 hover:border-amber-500/50 hover:text-amber-400'}`}>
+                  <ChevronRight size={20} />
+                </button>
+
+                {/* Dot indicators */}
+                <div className="flex gap-1.5 ml-2">
+                  {Array.from({ length: maxIdx + 1 }).map((_, i) => (
+                    <button key={i} onClick={() => setCarouselIdx(i)}
+                      className={`h-1.5 rounded-full transition-all duration-300
+                        ${carouselIdx === i
+                          ? 'w-5 bg-amber-500'
+                          : 'w-1.5 bg-white/20 hover:bg-white/40'}`} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {loadingData ? (
@@ -578,16 +615,15 @@ export default function Landing() {
               Belum ada barber tersedia
             </p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {barbers.map(barber => (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6
+              transition-all duration-300">
+              {visibleBarbers.map(barber => (
                 <div key={barber.id}
                   className="group border border-white/[0.07] rounded-2xl
-                    overflow-hidden hover:border-amber-500/30
-                    transition-all duration-400 hover:-translate-y-1
-                    hover:shadow-2xl hover:shadow-amber-500/5
-                    bg-[#111111]">
+                    overflow-hidden hover:border-amber-500/30 transition-all
+                    duration-300 hover:-translate-y-1 bg-[#111111]">
 
-                  {/* Photo — aspect ratio 4:5 */}
+                  {/* Photo 4:5 */}
                   <div className="relative overflow-hidden"
                     style={{ aspectRatio: '4/5' }}>
                     {barber.photo_url ? (
@@ -599,19 +635,17 @@ export default function Landing() {
                       <div className="w-full h-full bg-gradient-to-br
                         from-gray-900 to-gray-800 flex flex-col items-center
                         justify-center gap-3">
-                        <div className="w-20 h-20 rounded-full bg-white/5
-                          border border-white/10 flex items-center
+                        <div className="w-24 h-24 rounded-full bg-white/5
+                          border border-white/[0.08] flex items-center
                           justify-center">
-                          <Users size={32} className="text-gray-600"
+                          <Users size={36} className="text-gray-700"
                             strokeWidth={1.5} />
                         </div>
-                        <p className="text-gray-600 text-sm">Foto belum tersedia</p>
+                        <p className="text-gray-600 text-sm">No photo yet</p>
                       </div>
                     )}
-                    {/* Overlay gradient */}
                     <div className="absolute inset-0 bg-gradient-to-t
-                      from-[#111111] via-transparent to-transparent
-                      opacity-80" />
+                      from-[#111111] via-transparent to-transparent opacity-90" />
                   </div>
 
                   {/* Info */}
